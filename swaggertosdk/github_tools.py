@@ -49,7 +49,7 @@ def exception_to_github(github_obj_to_comment, summary=""):
         )
         response += content
         response += "\n\n</p></details>"
-        context.comment = github_obj_to_comment.create_comment(response)
+        context.comment = create_comment(github_obj_to_comment, response)
 
 def user_from_token(gh_token):
     """Get user login from GitHub token"""
@@ -257,3 +257,48 @@ class GithubLink:
             self.path,
             self.token
         )
+
+class DashboardCommentableObject:
+    def __init__(self, issue_or_pr, header):
+        self._issue_or_pr = issue_or_pr
+        self._header = header
+
+    def create_comment(self, text):
+        """Mimic issue API, so we can use it everywhere.
+        Return dashboard comment.
+        """
+        return DashboardComment.get_or_create(self._issue_or_pr, self._header, text)
+
+class DashboardComment:
+    def __init__(self, github_comment, header):
+        self.github_comment = github_comment
+        self._header = header
+
+    @classmethod
+    def get_or_create(cls, issue, header, text=None):
+        """Get or create the dashboard comment in this issue.
+        """
+        for comment in issue.get_comments():
+            try:
+                if comment.body.splitlines()[0] == header:
+                    obj = cls(comment, header)
+                    break
+            except IndexError: # The comment body is empty
+                pass
+        # Hooooooo, no dashboard comment, let's create one
+        else:
+            comment = create_comment(issue, header)
+            obj = cls(comment, header)
+        if text:
+            obj.edit(text)
+        return obj
+
+    def edit(self, text):
+        self.github_comment.edit(self._header+"\n"+text)
+    
+    @property
+    def body(self):
+        return self.github_comment.body[len(self._header+"\n"):]
+
+    def delete(self):
+        self.github_comment.delete()
